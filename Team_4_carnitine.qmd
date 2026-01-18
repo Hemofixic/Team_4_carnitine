@@ -1640,68 +1640,6 @@ ft_TAC_TAC_anova
 
 <br>
 
-``` {r safety anomalies}
-chisq_row <- function(data, arm_col, outcome_col,
-                      outcome_labels = c("0"="Нет отклонений", "1"="Есть отклонения"),
-                      test_label = NULL) {
-  arm <- data[[arm_col]]
-  y   <- data[[outcome_col]]
-
-  tab <- table(arm, y)
-
-  if (ncol(tab) == 2) {
-    colnames(tab) <- unname(outcome_labels)
-  }
-
-  res <- suppressWarnings(chisq.test(tab))
-
-  min_exp <- suppressWarnings(min(res$expected))
-  warn <- if (any(res$expected < 5)) "есть expected < 5" else ""
-
-  tibble(
-    Endpoint = ifelse(is.null(test_label), outcome_col, test_label),
-    N = sum(tab),
-    Statistic = round(unname(res$statistic), 3),
-    df = unname(res$parameter),
-    p_value = signif(res$p.value, 3),
-  )
-}
-
-endpoints <- c(
-  V2_VIT_HR_ABN   = "Отклонения ЧСС от нормы",
-  V2_VIT_RR_ABN   = "Отклонения ЧДД от нормы",
-  V2_VIT_BP_ABN   = "Отклонения АД от нормы",
-  V2_VIT_TEMP_ABN = "Отклонения температуры тела от нормы"
-)
-
-summary_df <- imap_dfr(
-  endpoints,
-  ~ chisq_row(
-      data = data_primary,
-      arm_col = "ARM",
-      outcome_col = .y,  # имя элемента = имя колонки
-      test_label = .x     # значение элемента = подпись
-    )
-)
-
-ft <- flextable(summary_df) %>%
-  set_caption("Частота отклонений жизненных показателей на конец исследовния(χ²)") %>%
-  set_header_labels(
-    Endpoint = "Показатель",
-    N = "N",
-    Statistic = "Статистика χ²",
-    df = "df",
-    p_value = "p-значение",
-    min_expected = "min expected",
-    note = "примечание"
-  ) %>%
-  bold(part = "header") %>%
-  autofit()
-
-ft
-```
-
-
 ```{r}
 wilson_ci <- function(x, n, conf.level = 0.95) {
   if (n == 0) return(c(NA, NA))
