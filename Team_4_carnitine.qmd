@@ -1195,3 +1195,234 @@ ft_TAC_TAC_anova
 # Анализ параметров безопасности
 
 <br>
+
+``` {r safety anomalies}
+chisq_row <- function(data, arm_col, outcome_col,
+                      outcome_labels = c("0"="Нет отклонений", "1"="Есть отклонения"),
+                      test_label = NULL) {
+  arm <- data[[arm_col]]
+  y   <- data[[outcome_col]]
+
+  tab <- table(arm, y)
+
+  if (ncol(tab) == 2) {
+    colnames(tab) <- unname(outcome_labels)
+  }
+
+  res <- suppressWarnings(chisq.test(tab))
+
+  min_exp <- suppressWarnings(min(res$expected))
+  warn <- if (any(res$expected < 5)) "есть expected < 5" else ""
+
+  tibble(
+    Endpoint = ifelse(is.null(test_label), outcome_col, test_label),
+    N = sum(tab),
+    Statistic = round(unname(res$statistic), 3),
+    df = unname(res$parameter),
+    p_value = signif(res$p.value, 3),
+  )
+}
+
+endpoints <- c(
+  V2_VIT_HR_ABN   = "Отклонения ЧСС от нормы",
+  V2_VIT_RR_ABN   = "Отклонения ЧДД от нормы",
+  V2_VIT_BP_ABN   = "Отклонения АД от нормы",
+  V2_VIT_TEMP_ABN = "Отклонения температуры тела от нормы"
+)
+
+summary_df <- imap_dfr(
+  endpoints,
+  ~ chisq_row(
+      data = data_primary,
+      arm_col = "ARM",
+      outcome_col = .y,  # имя элемента = имя колонки
+      test_label = .x     # значение элемента = подпись
+    )
+)
+
+ft <- flextable(summary_df) %>%
+  set_caption("Частота отклонений жизненных показателей на конец исследовния(χ²)") %>%
+  set_header_labels(
+    Endpoint = "Показатель",
+    N = "N",
+    Statistic = "Статистика χ²",
+    df = "df",
+    p_value = "p-значение",
+    min_expected = "min expected",
+    note = "примечание"
+  ) %>%
+  bold(part = "header") %>%
+  autofit()
+
+ft
+```
+
+
+```{r}
+wilson_ci <- function(x, n, conf.level = 0.95) {
+  if (n == 0) return(c(NA, NA))
+  z <- qnorm(1 - (1 - conf.level)/2)
+  p <- x / n
+  denom <- 1 + z^2 / n
+  center <- (p + z^2/(2*n)) / denom
+  half <- (z * sqrt((p*(1-p) + z^2/(4*n)) / n)) / denom
+  c(center - half, center + half)
+}
+
+rd_newcombe <- function(a, b, c, d, conf.level = 0.95) {
+
+  n1 <- a + b
+  n0 <- c + d
+  p1 <- if (n1 > 0) a/n1 else NA
+  p0 <- if (n0 > 0) c/n0 else NA
+  ci1 <- wilson_ci(a, n1, conf.level)
+  ci0 <- wilson_ci(c, n0, conf.level)
+  rd <- p1 - p0
+  lo <- ci1[1] - ci0[2]
+  hi <- ci1[2] - ci0[1]
+  c(est = rd, lo = lo, hi = hi)
+}
+
+rr_log_ci <- function(a, b, c, d, conf.level = 0.95) {
+  n1 <- a + b
+  n0 <- c + d
+  p1 <- a/n1
+  p0 <- c/n0
+  rr <- p1 / p0
+  z <- qnorm(1 - (1 - conf.level)/2)
+  se <- sqrt( (1/a) - (1/n1) + (1/c) - (1/n0) )
+  lo <- exp(log(rr) - z*se)
+  hi <- exp(log(rr) + z*se)
+  c(est = rr, lo = lo, hi = hi)
+}
+
+fmt_ci <- function(est, lo, hi, digits = 4) {
+  paste0(
+    formatC(est, format = "f", digits = digits),
+    " [",
+    formatC(lo,  format = "f", digits = digits),
+    "; ",
+    formatC(hi,  format = "f", digits = digits),
+    "]"
+  )
+}
+
+
+chisq_rd_rr_block <- function(data, arm_col, outcome_col,
+                              endpoint_label = outcome_col,
+                              level_treat = NULL, level_control = NULL,
+                              conf.level = 0.95) {
+
+  arm <- factor(data[[arm_col]])
+  y <- data[[outcome_col]]
+
+  y <- factor(y, levels = c(0, 1))
+
+  tab <- table(arm, y)
+
+  lv <- rownames(tab)
+
+  if (is.null(level_control)) level_control <- lv[1]
+  if (is.null(level_treat))   level_treat   <- lv[2]
+
+    tab2 <- tab[c(level_treat, level_control), , drop = FALSE]
+
+  a <- as.numeric(tab2[1, "1"])
+  b <- as.numeric(tab2[1, "0"])
+  c <- as.numeric(tab2[2, "1"])
+  d <- as.numeric(tab2[2, "0"])
+
+  chisq_res <- suppressWarnings(chisq.test(tab))
+  p_chisq <- chisq_res$p.value
+  chisq_stat = chisq_res$statistic
+
+  # RD
+  rd <- rd_newcombe(a, b, c, d, conf.level = conf.level)
+  rd_txt <- fmt_ci(rd["est"], rd["lo"], rd["hi"], digits = 4)
+
+  rr_txt <- "Не может быть рассчитан"
+  if (a > 0 && c > 0) {
+    rr <- rr_log_ci(a, b, c, d, conf.level = conf.level)
+    rr_txt <- fmt_ci(rr["est"], rr["lo"], rr["hi"], digits = 4)
+  }
+
+  tibble(
+    Endpoint = endpoint_label,
+    Metric = c("Критерий χ², p-value",
+               "Критерий χ², статистика",
+               "Разность долей (RD), 95% ДИ",
+               "Относительный риск (RR), 95% ДИ"),
+    Value = c(formatC(p_chisq, digits = 4, format = "f"),
+              formatC(chisq_stat, digits = 4, format = "f"),
+              rd_txt,
+              rr_txt)
+  )
+}
+
+endpoints <- c(
+  V2_VIT_HR_ABN   = "Отклонения ЧСС от нормы",
+  V2_VIT_RR_ABN   = "Отклонения ЧДД от нормы",
+  V2_VIT_BP_ABN   = "Отклонения АД от нормы",
+  V2_VIT_TEMP_ABN = "Отклонения температуры тела от нормы"
+)
+
+blocks_df <- imap_dfr(
+  endpoints,
+  ~ chisq_rd_rr_block(
+      data = data_primary,
+      arm_col = "ARM",
+      outcome_col = .y,
+      endpoint_label = .x
+    )
+)
+
+ft <- flextable(blocks_df) %>%
+  set_caption("Статистическое сравнение параметров безопасности\nмежду группами (V2)") %>%
+  set_header_labels(
+    Endpoint = "",
+    Metric = "",
+    Value = ""
+  ) %>%
+  merge_v(j = "Endpoint") %>%
+  valign(j = "Endpoint", valign = "top") %>%
+  bold(part = "header") %>%
+  autofit()
+
+ft
+```
+
+
+```{r poisson modeling_for_future}
+
+data_primary$V1_VIT_SUM_ABN = data_primary %>% 
+  select(V1_VIT_HR_ABN, 
+         V1_VIT_RR_ABN,
+         V1_VIT_BP_ABN,
+         V1_VIT_TEMP_ABN) %>% 
+  sum()
+
+data_primary$V2_VIT_SUM_ABN = data_primary %>% 
+  select(V2_VIT_HR_ABN, 
+         V2_VIT_RR_ABN,
+         V2_VIT_BP_ABN,
+         V2_VIT_TEMP_ABN) %>% 
+  sum()
+
+abn_fit = glm(V2_VIT_SUM_ABN ~ ARM + V1_VIT_SUM_ABN, family=poisson, data=data_primary)
+#abn_fit
+
+dispersion <- sum(residuals(abn_fit, type = "pearson")^2) /
+              abn_fit$df.residual
+#dispersion
+
+#pois_summary <- tibble(
+#  Endpoint = "Общая нагрузка AE (сумма отклонений)",
+#  Model = "Poisson regression",
+#  IRR = exp(coef(abn_fit))["ARMTreatment"],
+#  CI_low = exp(confint(abn_fit))["ARMTreatment", 1],
+#  CI_high = exp(confint(abn_fit))["ARMTreatment", 2],
+#  p_value = pois_robust["ARMTreatment", "Pr(>|z|)"]
+#)
+
+```
+
