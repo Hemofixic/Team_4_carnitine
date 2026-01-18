@@ -807,7 +807,7 @@ ft_SEM_CONC_changes_comparison_anova <- SEM_CONC_changes_comparison_anova %>%
 ft_SEM_CONC_changes_comparison_anova
 ```
 
-Статистически значимого влияния группы, времени и их взаимодействия на "Концентрацию сперматозоидов (млн-мл) "не выявлено ($p = 0.087$). Размеры эффектов были пренебрежимо малы. 
+Статистически значимого влияния группы, времени и их взаимодействия на "Концентрацию сперматозоидов (млн-мл)" не выявлено ($p = 0.087$). Размеры эффектов были пренебрежимо малы. 
 
 ```{r anova_SEM_PMOT}
 data_SEM_PMOT <- data %>%
@@ -856,7 +856,7 @@ ft_SEM_PMOT_changes_comparison_anova <- SEM_PMOT_changes_comparison_anova %>%
 
 ft_SEM_PMOT_changes_comparison_anova
 ```
-Статистически значимого влияния группы, времени и их взаимодействия на "Концентрация сперматозоидов (млн-мл) "не выявлено ($p = 0.329$). Размеры эффектов были пренебрежимо малы.
+Статистически значимого влияния группы, времени и их взаимодействия на "Прогрессивная подвижность (%)" не выявлено ($p = 0.329$). Размеры эффектов были пренебрежимо малы.
 
 ```{r anova_SEM_MORPH}
 data_SEM_MORPH <- data %>%
@@ -988,9 +988,207 @@ ft_SEM_MORPH_changes_comparison_ancova
 
 ## Гормональный профиль и биохимические маркеры (тестостерон, ФСГ, ЛГ).
 
+```{r anova_HOR_FSH}
+data_HOR_FSH <- data %>%
+  pivot_longer(
+    cols = c(V1_HOR_FSH, V2_HOR_FSH),
+    names_to = "time",
+    values_to = "HOR_FSH"
+  ) %>%
+  mutate(time = str_replace(time, "_HOR_FSH", "")) %>%  
+  mutate(time = factor(time, levels = c("V1", "V2")))
+
+HOR_FSH_anova <- anova_test(
+  data = data_HOR_FSH,
+  dv = HOR_FSH,
+  wid = USUBJID,
+  between = ARM, 
+  within = time
+) %>%
+  as_tibble() %>%
+  select(Effect, `F`, "p")  %>%
+  mutate(Effect = recode(
+    Effect,
+    ARM = "Терапия",
+    time = "Время",
+    "ARM:time" = "Терапия:Время")
+  )
+
+ft_HOR_FSH_anova <- HOR_FSH_anova %>%
+  mutate(
+    `F` = round(`F`, 2),
+    `p` = round(`p`, 4)
+  ) %>%
+  flextable() %>%
+  set_caption(caption = "ANOVA: факторы \"Группа терапии\" и \"Время\",\n переменная \"Фолликуло-стимулирующий гормон (МЕ/Л)\"") %>%
+  autofit() %>% 
+  set_header_labels(
+    values = list(
+      Effect = "Фактор",
+      `F` = "F-статистика",
+      `p`= "p-значение"
+    )
+  ) %>%
+  bold(part = "header")  %>%
+  align(align = "center", part = "header") %>%
+  align(align = "center", part = "body")   
+
+ft_HOR_FSH_anova
+```
+
+Статистически значимого влияния группы, времени и их взаимодействия на "Фолликуло-стимулирующий гормон (МЕ/Л)" не выявлено ($p = 0.332$). Размеры эффектов были пренебрежимо малы.
+
+```{r anova_HOR_LH}
+data_HOR_LH <- data %>%
+  pivot_longer(
+    cols = c(V1_HOR_LH, V2_HOR_LH),
+    names_to = "time",
+    values_to = "HOR_LH"
+  ) %>%
+  mutate(time = str_replace(time, "_HOR_LH", "")) %>%  
+  mutate(time = factor(time, levels = c("V1", "V2")))
+
+HOR_LH_anova <- anova_test(
+  data = data_HOR_LH,
+  dv = HOR_LH,
+  wid = USUBJID,
+  between = ARM, 
+  within = time
+) %>%
+  as_tibble() %>%
+  select(Effect, `F`, "p")  %>%
+  mutate(Effect = recode(
+    Effect,
+    ARM = "Терапия",
+    time = "Время",
+    "ARM:time" = "Терапия:Время")
+  )
+
+ft_HOR_LH_anova <- HOR_LH_anova %>%
+  mutate(
+    `F` = round(`F`, 2),
+    `p` = round(`p`, 4)
+  ) %>%
+  flextable() %>%
+  set_caption(caption = "ANOVA: факторы \"Группа терапии\" и \"Время\",\n переменная \"Лютеинизирующий гормон (МЕ/Л)\"") %>%
+  autofit() %>% 
+  set_header_labels(
+    values = list(
+      Effect = "Фактор",
+      `F` = "F-статистика",
+      `p`= "p-значение"
+    )
+  ) %>%
+  bold(part = "header")  %>%
+  align(align = "center", part = "header") %>%
+  align(align = "center", part = "body")   
+
+ft_HOR_LH_anova
+```
+
+Статистически значимого влияния группы, времени и их взаимодействия на "Лютеинизирующий гормон (МЕ/Л)" не выявлено ($p = 0.48$). Размеры эффектов были пренебрежимо малы.
+
+```{r anova_HOR_TT}
+data_HOR_TT <- data %>%
+  pivot_longer(
+    cols = c(V1_HOR_TT, V2_HOR_TT),
+    names_to = "time",
+    values_to = "HOR_TT"
+  ) %>%
+  mutate(time = str_replace(time, "_HOR_TT", "")) %>%  
+  mutate(time = factor(time, levels = c("V1", "V2")))
+
+HOR_TT_anova <- anova_test(
+  data = data_HOR_TT,
+  dv = HOR_TT,
+  wid = USUBJID,
+  between = ARM, 
+  within = time
+) %>%
+  as_tibble() %>%
+  select(Effect, `F`, "p")  %>%
+  mutate(Effect = recode(
+    Effect,
+    ARM = "Терапия",
+    time = "Время",
+    "ARM:time" = "Терапия:Время")
+  )
+
+ft_HOR_TT_anova <- HOR_TT_anova %>%
+  mutate(
+    `F` = round(`F`, 2),
+    `p` = round(`p`, 4)
+  ) %>%
+  flextable() %>%
+  set_caption(caption = "ANOVA: факторы \"Группа терапии\" и \"Время\",\n переменная \"Обший тестостерон (МЕ/Л)\"") %>%
+  autofit() %>% 
+  set_header_labels(
+    values = list(
+      Effect = "Фактор",
+      `F` = "F-статистика",
+      `p`= "p-значение"
+    )
+  ) %>%
+  bold(part = "header")  %>%
+  align(align = "center", part = "header") %>%
+  align(align = "center", part = "body")   
+
+ft_HOR_TT_anova
+```
+Статистически значимого влияния группы, времени и их взаимодействия на "Обший тестостерон (МЕ/Л)" не выявлено ($p = 0.15$). Размеры эффектов были пренебрежимо малы.
+
 <br>
 
 ## Суммарная антиоксидантная способность семенной плазмы (ммоль/л).
+
+```{r anova_TAC_TAC}
+data_TAC_TAC <- data %>%
+  pivot_longer(
+    cols = c(V1_TAC_TAC, V2_TAC_TAC),
+    names_to = "time",
+    values_to = "TAC_TAC"
+  ) %>%
+  mutate(time = str_replace(time, "_TAC_TAC", "")) %>%  
+  mutate(time = factor(time, levels = c("V1", "V2")))
+
+TAC_TAC_anova <- anova_test(
+  data = data_TAC_TAC,
+  dv = TAC_TAC,
+  wid = USUBJID,
+  between = ARM, 
+  within = time
+) %>%
+  as_tibble() %>%
+  select(Effect, `F`, "p")  %>%
+  mutate(Effect = recode(
+    Effect,
+    ARM = "Терапия",
+    time = "Время",
+    "ARM:time" = "Терапия:Время")
+  )
+
+ft_TAC_TAC_anova <- TAC_TAC_anova %>%
+  mutate(
+    `F` = round(`F`, 2),
+    `p` = round(`p`, 4)
+  ) %>%
+  flextable() %>%
+  set_caption(caption = "ANOVA: факторы \"Группа терапии\" и \"Время\",\n переменная \"Суммарная антиоксидантная способность семенной плазмы (a.u.)\"") %>%
+  autofit() %>% 
+  set_header_labels(
+    values = list(
+      Effect = "Фактор",
+      `F` = "F-статистика",
+      `p`= "p-значение"
+    )
+  ) %>%
+  bold(part = "header")  %>%
+  align(align = "center", part = "header") %>%
+  align(align = "center", part = "body")   
+
+ft_TAC_TAC_anova
+```
+Статистически значимого влияния группы, времени и их взаимодействия на "Обший тестостерон (МЕ/Л)" не выявлено ($p = 0.623$). Размеры эффектов были пренебрежимо малы.
 
 <br>
 
