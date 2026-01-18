@@ -20,6 +20,7 @@ execute:
 library(tidyverse)
 library(flextable)
 library(officer)
+library(ggplot2)
 ```
 
 ```{r}
@@ -447,6 +448,313 @@ ft_bmi
 <br>
 
 # Анализ первичной конечных точек
+
+## Определение первичной конечной точки
+
+Первичная конечная точка: доля пациентов с нормализованной спермограммой к 6-му месяцу терапии (V2, День 90) по критериям ВОЗ 2010 г. по сравнению с исходным уровнем (V1, День 1).
+
+**Критерии нормализации (все три должны выполняться одновременно):**
+- Концентрация сперматозоидов ≥15 млн/мл
+- Прогрессивная подвижность ≥32%
+- Нормальная морфология ≥4%
+
+```{r}
+# Создание бинарных переменных для нормализованной спермограммы
+data_primary <- data %>%
+  mutate(
+    # Нормализация на исходном визите (V1)
+    V1_NORMALIZED = ifelse(
+      V1_SEM_CONC >= 15 & V1_SEM_PMOT >= 32 & V1_SEM_MORPH >= 4,
+      1, 0
+    ),
+    # Нормализация на визите 2 (V2)
+    V2_NORMALIZED = ifelse(
+      V2_SEM_CONC >= 15 & V2_SEM_PMOT >= 32 & V2_SEM_MORPH >= 4,
+      1, 0
+    )
+  ) %>%
+  # Конвертируем в числовой формат для корректных вычислений
+  mutate(
+    V1_NORMALIZED = as.numeric(V1_NORMALIZED),
+    V2_NORMALIZED = as.numeric(V2_NORMALIZED)
+  )
+
+# Описательная статистика по группам
+primary_desc <- data_primary %>%
+  group_by(ARM) %>%
+  summarise(
+    n_total = n(),
+    # Исходный визит (V1)
+    V1_normalized_n = sum(V1_NORMALIZED == 1),
+    V1_normalized_pct = round(mean(V1_NORMALIZED == 1) * 100, 1),
+    # Визит 2 (V2, 6 месяцев)
+    V2_normalized_n = sum(V2_NORMALIZED == 1),
+    V2_normalized_pct = round(mean(V2_NORMALIZED == 1) * 100, 1),
+    # Изменение
+    change_n = V2_normalized_n - V1_normalized_n,
+    change_pct = V2_normalized_pct - V1_normalized_pct
+  )
+
+print("Описательная статистика первичной конечной точки:")
+print(primary_desc)
+```
+
+```{r}
+# Статистический анализ: сравнение между группами на V2
+contingency_table <- table(
+  data_primary$ARM, 
+  factor(data_primary$V2_NORMALIZED, levels = c(0, 1), labels = c("Не нормализована", "Нормализована"))
+)
+print("Таблица сопряженности (Группа × Нормализация на V2):")
+print(contingency_table)
+
+# Точный критерий Фишера (предпочтительнее при малых частотах)
+fisher_test <- fisher.test(contingency_table)
+cat("\nТочный критерий Фишера:\n")
+print(fisher_test)
+
+# Критерий хи-квадрат (с предупреждением о малых частотах)
+chi_square_test <- chisq.test(contingency_table)
+cat("\nКритерий хи-квадрат:\n")
+print(chi_square_test)
+
+# Расчет относительного риска (RR) и разности долей (RD) с обработкой нулевых значений
+if (nrow(contingency_table) == 2 && ncol(contingency_table) == 2) {
+  row_names <- rownames(contingency_table)
+  lc_row <- which(row_names == "L-carnitine")
+  placebo_row <- which(row_names == "Placebo")
+  
+  a <- contingency_table[lc_row, 2]      # L-carnitine нормализована
+  b <- contingency_table[lc_row, 1]      # L-carnitine не нормализована
+  c <- contingency_table[placebo_row, 2]  # Placebo нормализована
+  d <- contingency_table[placebo_row, 1] # Placebo не нормализована
+  
+  p1 <- a / (a + b)  # Доля в группе L-carnitine
+  p2 <- c / (c + d)  # Доля в группе Placebo
+  
+  # Разность долей (RD) - рассчитывается всегда
+  RD <- p1 - p2
+  SE_RD <- sqrt((p1*(1-p1)/(a+b)) + (p2*(1-p2)/(c+d)))
+  RD_CI_lower <- RD - 1.96 * SE_RD
+  RD_CI_upper <- RD + 1.96 * SE_RD
+  
+  cat("\nРазность долей (RD):", round(RD, 4))
+  cat("\n95% ДИ для RD: [", round(RD_CI_lower, 4), "; ", round(RD_CI_upper, 4), "]\n", sep = "")
+  
+  # Относительный риск (RR) - только если обе доли > 0
+  if (a > 0 && c > 0) {
+    RR <- p1 / p2
+    log_RR <- log(RR)
+    SE_log_RR <- sqrt((1/a) - (1/(a+b)) + (1/c) - (1/(c+d)))
+    CI_lower <- exp(log_RR - 1.96 * SE_log_RR)
+    CI_upper <- exp(log_RR + 1.96 * SE_log_RR)
+    cat("\nОтносительный риск (RR):", round(RR, 3))
+    cat("\n95% ДИ для RR: [", round(CI_lower, 3), "; ", round(CI_upper, 3), "]\n", sep = "")
+  } else {
+    cat("\nОтносительный риск (RR): не может быть рассчитан (нулевые значения в одной из групп)\n")
+    RR <- NA
+    CI_lower <- NA
+    CI_upper <- NA
+  }
+}
+```
+
+```{r}
+# Подготовка данных для визуализации
+viz_data <- data_primary %>%
+  select(ARM, V1_NORMALIZED, V2_NORMALIZED) %>%
+  pivot_longer(
+    cols = c(V1_NORMALIZED, V2_NORMALIZED),
+    names_to = "Visit",
+    values_to = "Normalized"
+  ) %>%
+  mutate(
+    Visit = case_when(
+      Visit == "V1_NORMALIZED" ~ "Исходный визит (V1)",
+      Visit == "V2_NORMALIZED" ~ "90 дней (V2)"
+    ),
+    Normalized = as.numeric(Normalized)
+  ) %>%
+  group_by(ARM, Visit) %>%
+  summarise(
+    n_normalized = sum(Normalized == 1),
+    n_total = n(),
+    pct = round(mean(Normalized == 1) * 100, 1),
+    .groups = "drop"
+  )
+
+# Столбчатая диаграмма
+p_primary <- ggplot(viz_data, aes(x = Visit, y = pct, fill = ARM)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8), width = 0.7) +
+  geom_text(
+    aes(label = paste0(n_normalized, "\n(", pct, "%)")),
+    position = position_dodge(width = 0.8),
+    vjust = -0.3,
+    size = 3.5
+  ) +
+  scale_fill_manual(
+    values = c("L-carnitine" = "#4A90E2", "Placebo" = "#E24A4A"),
+    name = "Группа"
+  ) +
+  labs(
+    title = "Доля пациентов с нормализованной спермограммой",
+    subtitle = "По критериям ВОЗ 2010 г. (концентрация ≥15 млн/мл, подвижность ≥32%, морфология ≥4%)",
+    x = "Визит",
+    y = "Доля пациентов, %"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(size = 12, face = "bold"),
+    plot.subtitle = element_text(size = 10),
+    axis.text = element_text(size = 9),
+    axis.title = element_text(size = 10),
+    legend.position = "bottom"
+  ) +
+  ylim(0, max(c(viz_data$pct, 5)) * 1.2)
+
+print(p_primary)
+```
+
+```{r}
+# Создание итоговой таблицы результатов
+primary_results <- data.frame(
+  Параметр = character(),
+  L_carnitine = character(),
+  Placebo = character(),
+  Статистика = character(),
+  stringsAsFactors = FALSE
+)
+
+# Функция для добавления строки
+add_row_result <- function(param, lc_val, placebo_val, stat = "") {
+  primary_results <<- rbind(
+    primary_results,
+    data.frame(
+      Параметр = param,
+      L_carnitine = lc_val,
+      Placebo = placebo_val,
+      Статистика = stat,
+      stringsAsFactors = FALSE
+    )
+  )
+}
+
+# Заголовок
+add_row_result("ИТОГИ АНАЛИЗА ПЕРВИЧНОЙ КОНЕЧНОЙ ТОЧКИ", "", "", "")
+
+# Исходный визит (V1)
+lc_v1 <- primary_desc %>% filter(ARM == "L-carnitine")
+placebo_v1 <- primary_desc %>% filter(ARM == "Placebo")
+
+add_row_result("ИСХОДНЫЙ ВИЗИТ (V1, День 1)", "", "", "")
+add_row_result(
+  "Пациенты с нормализованной спермограммой",
+  sprintf("%d (%.1f%%)", lc_v1$V1_normalized_n, lc_v1$V1_normalized_pct),
+  sprintf("%d (%.1f%%)", placebo_v1$V1_normalized_n, placebo_v1$V1_normalized_pct),
+  ""
+)
+
+# Визит 2 (V2)
+add_row_result("ВИЗИТ 2 (V2, День 90)", "", "", "")
+add_row_result(
+  "Пациенты с нормализованной спермограммой",
+  sprintf("%d (%.1f%%)", lc_v1$V2_normalized_n, lc_v1$V2_normalized_pct),
+  sprintf("%d (%.1f%%)", placebo_v1$V2_normalized_n, placebo_v1$V2_normalized_pct),
+  ""
+)
+
+# Изменение
+add_row_result("ИЗМЕНЕНИЕ (V2 - V1)", "", "", "")
+add_row_result(
+  "Изменение количества пациентов",
+  sprintf("%+d", lc_v1$change_n),
+  sprintf("%+d", placebo_v1$change_n),
+  ""
+)
+add_row_result(
+  "Изменение доли, %",
+  sprintf("%+.1f%%", lc_v1$change_pct),
+  sprintf("%+.1f%%", placebo_v1$change_pct),
+  ""
+)
+
+# Статистический анализ между группами на V2
+add_row_result("СТАТИСТИЧЕСКОЕ СРАВНЕНИЕ МЕЖДУ ГРУППАМИ (V2)", "", "", "")
+add_row_result(
+  "Точный критерий Фишера, p-value",
+  "",
+  "",
+  sprintf("%.4f", fisher_test$p.value)
+)
+add_row_result(
+  "Критерий хи-квадрат, p-value",
+  "",
+  "",
+  sprintf("%.4f", chi_square_test$p.value)
+)
+add_row_result(
+  "Разность долей (RD), 95% ДИ",
+  "",
+  "",
+  sprintf("%.4f [%.4f; %.4f]", RD, RD_CI_lower, RD_CI_upper)
+)
+if (exists("RR") && !is.na(RR)) {
+  add_row_result(
+    "Относительный риск (RR), 95% ДИ",
+    "",
+    "",
+    sprintf("%.3f [%.3f; %.3f]", RR, CI_lower, CI_upper)
+  )
+} else {
+  add_row_result(
+    "Относительный риск (RR), 95% ДИ",
+    "",
+    "",
+    "Не может быть рассчитан"
+  )
+}
+
+# Создание таблицы с flextable
+ft_primary <- flextable(primary_results) %>%
+  fontsize(size = 9, part = "all") %>%
+  font(fontname = "Times New Roman", part = "all") %>%
+  align(align = "left", part = "body") %>%
+  align(align = "center", part = "header") %>%
+  align(j = 2:4, align = "center", part = "body") %>%
+  set_caption("Таблица 2. Анализ первичной конечной точки: доля пациентов с нормализованной спермограммой") %>%
+  add_footer_lines("Примечание: Нормализация по критериям ВОЗ 2010 г.: концентрация ≥15 млн/мл, прогрессивная подвижность ≥32%, нормальная морфология ≥4%. Все три критерия должны выполняться одновременно. RD - разность долей, RR - относительный риск, ДИ - доверительный интервал. При нулевых значениях в одной из групп RR не может быть рассчитан.") %>%
+  autofit() %>%
+  border_inner(border = fp_border(color = "black", width = 1)) %>%
+  border_outer(border = fp_border(color = "black", width = 1)) %>%
+  bold(part = "header") %>%
+  bg(bg = "#f2f2f2", part = "header") %>%
+  padding(padding = 4, part = "all")
+
+# Форматирование заголовков разделов
+section_rows <- which(primary_results$L_carnitine == "" & primary_results$Placebo == "" & primary_results$Статистика == "")
+for(idx in section_rows) {
+  ft_primary <- ft_primary %>%
+    merge_at(i = idx, j = 1:4, part = "body") %>%
+    align(i = idx, align = "center", part = "body") %>%
+    bold(i = idx, part = "body") %>%
+    bg(i = idx, bg = "#f8f8f8", part = "body") %>%
+    border(i = idx, 
+           border.top = fp_border(color = "black", width = 1),
+           border.bottom = fp_border(color = "black", width = 1),
+           part = "body")
+}
+
+ft_primary
+```
+### Интерпретация результатов первичной конечной точки
+
+Анализ первичной конечной точки показал, что доля пациентов с нормализованной спермограммой к 90-му дню терапии (визит V2) была крайне низкой в обеих группах исследования. 
+
+На исходном визите (V1) нормализованная спермограмма по критериям ВОЗ 2010 г. (концентрация ≥15 млн/мл, прогрессивная подвижность ≥32%, нормальная морфология ≥4%) была зарегистрирована у 0 пациентов (0,0%) в группе L-карнитина и у 1 пациента (1,8%) в группе плацебо. К моменту завершения исследования (V2, День 90) показатели остались без изменений: в группе L-карнитина — 0 пациентов (0,0%), в группе плацебо — 1 пациент (1,8%). Изменение доли пациентов с нормализованной спермограммой от исходного уровня составило 0,0% в обеих группах.
+
+Статистическое сравнение между группами на визите V2 не выявило статистически значимых различий: точный критерий Фишера (p = 1,0000) и критерий хи-квадрат (p = 1,0000) показали отсутствие статистически значимой разницы между группами. Разность долей (RD) составила -0,0175 (95% ДИ: -0,0516; 0,0165), что также указывает на отсутствие значимого различия между группами. Относительный риск (RR) не может быть рассчитан в связи с нулевыми значениями в группе L-карнитина.
+
+Полученные результаты свидетельствуют о том, что применение L-карнитина в течение 90 дней не привело к статистически значимому увеличению доли пациентов с нормализованной спермограммой по сравнению с группой плацебо. Низкая частота нормализации в обеих группах может быть связана с тяжестью исходных нарушений сперматогенеза у включенных в исследование пациентов, а также с необходимостью более длительного периода терапии для достижения клинически значимого эффекта.
 
 <br>
 
