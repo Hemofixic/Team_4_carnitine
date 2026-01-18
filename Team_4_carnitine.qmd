@@ -891,8 +891,8 @@ ft_second_point_SEM <- flextable(second_point_SEM) %>%
     V2_normalized_n = "Здоровые пациенты (Визит 2)",
     V2_normalized_pct = "Здоровые пациенты, % (Визит 2)"
   ) %>%
-  autofit() %>%
   theme_box() %>%
+  width(width = 1) %>%
   align(align = "center", part = "all")
 
 ft_second_point_SEM
@@ -1236,7 +1236,6 @@ ft_SEM_CONC_changes_comparison_anova <- SEM_CONC_changes_comparison_anova %>%
   ) %>%
   flextable() %>%
   set_caption(caption = "ANOVA: факторы \"Группа терапии\" и \"Время\",\n переменная \"Концентрация сперматозоидов (млн-мл)\"") %>%
-  autofit() %>% 
   set_header_labels(
     values = list(
       Effect = "Фактор",
@@ -1244,6 +1243,7 @@ ft_SEM_CONC_changes_comparison_anova <- SEM_CONC_changes_comparison_anova %>%
       `p`= "p-значение"
     )
   ) %>%
+  autofit() %>% 
   bold(part = "header")  %>%
   align(align = "center", part = "header") %>%
   align(align = "center", part = "body")   
