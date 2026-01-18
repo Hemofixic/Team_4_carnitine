@@ -447,8 +447,245 @@ ft_bmi
 -   Ухудшать параметры спермограммы.
 -   Модифицировать ответ на терапию.
 
-##
+## Анализ соотношения ацилкарнитин/свободный L-карнитин в крови и моче у пациентов
 
+В лабораторной диагностике первичного и вторичного дефицита карнитина используют измерение общего и свободного карнитина в плазме крови и моче с расчетом ацилкарнитина (эстерифицированного карнитина) как разницы между общим и свободным и оценки соотношения ацилкарнитина и свободного карнитина.
+
+```{r}
+# Анализ соотношения Ацилкарнитин/Свободный карнитин
+ratio_analysis_corrected <- data.frame(
+  Параметр = character(),
+  Значение = character(),
+  stringsAsFactors = FALSE
+)
+
+# Функции для добавления строк
+add_header_ratio <- function(section_name) {
+  ratio_analysis_corrected <<- rbind(ratio_analysis_corrected, 
+                                    data.frame(Параметр = section_name,
+                                               Значение = "",
+                                               stringsAsFactors = FALSE))
+}
+
+add_stat_ratio <- function(parameter, value) {
+  ratio_analysis_corrected <<- rbind(ratio_analysis_corrected, 
+                                    data.frame(Параметр = parameter,
+                                               Значение = value,
+                                               stringsAsFactors = FALSE))
+}
+
+# Расчет с обработкой нулевых значений
+data_clean <- data_clean %>%
+  mutate(
+    # КРОВЬ: Ацилкарнитин = Общий - Свободный
+    Acyl_blood = V1_LCA_B_TOTAL - V1_LCA_B_FREE,
+    
+    # Расчет соотношения для крови (должно быть нормально)
+    Ratio_acyl_free_blood = ifelse(V1_LCA_B_FREE > 0, 
+                                   Acyl_blood / V1_LCA_B_FREE, 
+                                   NA),
+    
+    # МОЧА: Ацилкарнитин = Общий - Свободный
+    Acyl_urine = V1_LCA_U_TOTAL - V1_LCA_U_FREE,
+    
+    # Расчет соотношения для мочи с проверкой на ноль
+    Ratio_acyl_free_urine = ifelse(V1_LCA_U_FREE > 0, 
+                                   Acyl_urine / V1_LCA_U_FREE, 
+                                   NA),
+    
+    # Флаги отклонений
+    Abnormal_ratio_blood = case_when(
+      is.na(Ratio_acyl_free_blood) ~ NA,
+      Ratio_acyl_free_blood < 0.1 | Ratio_acyl_free_blood > 0.8 ~ TRUE,
+      TRUE ~ FALSE
+    ),
+    
+    Abnormal_ratio_urine = case_when(
+      is.na(Ratio_acyl_free_urine) ~ NA,
+      Ratio_acyl_free_urine < 0.5 | Ratio_acyl_free_urine > 7.3 ~ TRUE,
+      TRUE ~ FALSE
+    ),
+    
+    # Категории для мочи
+    Ratio_urine_category = case_when(
+      is.na(Ratio_acyl_free_urine) ~ "Невозможно рассчитать (свободный = 0)",
+      Ratio_acyl_free_urine < 0.5 ~ "Сниженное",
+      Ratio_acyl_free_urine >= 0.5 & Ratio_acyl_free_urine <= 7.3 ~ "В норме",
+      Ratio_acyl_free_urine > 7.3 ~ "Повышенное",
+      TRUE ~ "Не определено"
+    )
+  )
+
+# Проверим, сколько пациентов имеют свободный карнитин в моче = 0
+zero_free_urine <- sum(data_clean$V1_LCA_U_FREE == 0, na.rm = TRUE)
+
+# 1. СООТНОШЕНИЕ В КРОВИ
+add_header_ratio("СООТНОШЕНИЕ АЦИЛКАРНИТИН/СВОБОДНЫЙ КАРНИТИН В КРОВИ")
+
+mean_ratio_blood <- mean(data_clean$Ratio_acyl_free_blood, na.rm = TRUE)
+sd_ratio_blood <- sd(data_clean$Ratio_acyl_free_blood, na.rm = TRUE)
+median_ratio_blood <- median(data_clean$Ratio_acyl_free_blood, na.rm = TRUE)
+
+add_stat_ratio("Соотношение (среднее ± СО)", 
+              sprintf("%.2f ± %.2f", mean_ratio_blood, sd_ratio_blood))
+add_stat_ratio("Диапазон", sprintf("%.2f - %.2f", 
+                                   min(data_clean$Ratio_acyl_free_blood, na.rm = TRUE),
+                                   max(data_clean$Ratio_acyl_free_blood, na.rm = TRUE)))
+add_stat_ratio("Референсные значения (Инвитро)", "0.1 - 0.8")
+
+# Распределение для крови
+blood_ratio_summary <- data_clean %>%
+  filter(!is.na(Ratio_acyl_free_blood)) %>%
+  mutate(
+    Category = case_when(
+      Ratio_acyl_free_blood < 0.1 ~ "Сниженное",
+      Ratio_acyl_free_blood >= 0.1 & Ratio_acyl_free_blood <= 0.8 ~ "В норме",
+      Ratio_acyl_free_blood > 0.8 ~ "Повышенное"
+    )
+  ) %>%
+  count(Category) %>%
+  mutate(Percent = n / sum(n) * 100)
+
+for (i in 1:nrow(blood_ratio_summary)) {
+  add_stat_ratio(paste("Соотношение", tolower(blood_ratio_summary$Category[i])), 
+                sprintf("%d (%.1f%%)", blood_ratio_summary$n[i], blood_ratio_summary$Percent[i]))
+}
+
+# 2. СООТНОШЕНИЕ В МОЧЕ
+add_header_ratio("СООТНОШЕНИЕ АЦИЛКАРНИТИН/СВОБОДНЫЙ КАРНИТИН В МОЧЕ")
+
+# Только для пациентов с V1_LCA_U_FREE > 0
+valid_urine_data <- data_clean %>% 
+  filter(!is.na(Ratio_acyl_free_urine) & is.finite(Ratio_acyl_free_urine))
+
+n_valid_urine <- nrow(valid_urine_data)
+
+if (n_valid_urine > 0) {
+  mean_ratio_urine <- mean(valid_urine_data$Ratio_acyl_free_urine, na.rm = TRUE)
+  sd_ratio_urine <- sd(valid_urine_data$Ratio_acyl_free_urine, na.rm = TRUE)
+  median_ratio_urine <- median(valid_urine_data$Ratio_acyl_free_urine, na.rm = TRUE)
+  
+  add_stat_ratio("Соотношение (среднее ± СО)", 
+                sprintf("%.2f ± %.2f", mean_ratio_urine, sd_ratio_urine))
+  add_stat_ratio("Диапазон", sprintf("%.2f - %.2f", 
+                                     min(valid_urine_data$Ratio_acyl_free_urine, na.rm = TRUE),
+                                     max(valid_urine_data$Ratio_acyl_free_urine, na.rm = TRUE)))
+} else {
+  add_stat_ratio("Соотношение (среднее ± СО)", "Невозможно рассчитать")
+  add_stat_ratio("Невозможно рассчитать")
+  add_stat_ratio("Диапазон", "Невозможно рассчитать")
+}
+
+add_stat_ratio("Референсные значения (Инвитро)", "0.5 - 7.3")
+
+# Распределение для мочи
+urine_ratio_summary <- data_clean %>%
+  filter(!is.na(Ratio_urine_category)) %>%
+  count(Ratio_urine_category) %>%
+  mutate(Percent = n / sum(n) * 100)
+
+for (i in 1:nrow(urine_ratio_summary)) {
+  add_stat_ratio(urine_ratio_summary$Ratio_urine_category[i], 
+                sprintf("%d (%.1f%%)", urine_ratio_summary$n[i], urine_ratio_summary$Percent[i]))
+}
+
+# 3. СВОДНЫЙ АНАЛИЗ
+add_header_ratio("СВОДНЫЙ АНАЛИЗ МЕТАБОЛИЗМА КАРНИТИНА")
+
+# Для крови
+abnormal_blood_count <- sum(data_clean$Abnormal_ratio_blood, na.rm = TRUE)
+valid_blood_count <- sum(!is.na(data_clean$Abnormal_ratio_blood))
+abnormal_blood_percent <- round(abnormal_blood_count / valid_blood_count * 100, 1)
+
+add_stat_ratio("Пациентов с отклонениями соотношения в крови", 
+              sprintf("%d/%d (%.1f%%)", abnormal_blood_count, valid_blood_count, abnormal_blood_percent))
+
+# Для мочи (только где можно рассчитать)
+abnormal_urine_count <- sum(data_clean$Abnormal_ratio_urine, na.rm = TRUE)
+valid_urine_count <- sum(!is.na(data_clean$Abnormal_ratio_urine))
+abnormal_urine_percent <- round(abnormal_urine_count / valid_urine_count * 100, 1)
+
+add_stat_ratio("Пациентов с отклонениями соотношения в моче (где можно рассчитать)", 
+              sprintf("%d/%d (%.1f%%)", abnormal_urine_count, valid_urine_count, abnormal_urine_percent))
+
+# Пациенты с нормальным метаболизмом в обоих показателях (где оба можно рассчитать)
+normal_both <- data_clean %>%
+  filter(!is.na(Abnormal_ratio_blood) & !is.na(Abnormal_ratio_urine)) %>%
+  filter(!Abnormal_ratio_blood & !Abnormal_ratio_urine) %>%
+  nrow()
+
+total_both <- data_clean %>%
+  filter(!is.na(Abnormal_ratio_blood) & !is.na(Abnormal_ratio_urine)) %>%
+  nrow()
+
+if (total_both > 0) {
+  add_stat_ratio("Пациентов с нормальным соотношением в обоих показателях", 
+                sprintf("%d/%d (%.1f%%)", normal_both, total_both, normal_both/total_both*100))
+}
+
+# Создаем таблицу с flextable
+ft_ratio_corrected <- flextable(ratio_analysis_corrected) %>%
+  fontsize(size = 9, part = "all") %>%
+  font(fontname = "Times New Roman", part = "all") %>%
+  align(align = "center", part = "header") %>%
+  align(align = "left", part = "body") %>%
+  align(j = 2, align = "right", part = "body") %>%
+  set_caption("Таблица 3. Анализ соотношения Ацилкарнитин/Свободный карнитин") %>%
+  add_footer_lines("*Соотношение рассчитывается только при свободном карнитине > 0
+**У некоторых пациентов свободный карнитин в моче = 0, соотношение невозможно рассчитать") %>%
+  autofit() %>%
+  border_inner(border = fp_border(color = "black", width = 1)) %>%
+  border_outer(border = fp_border(color = "black", width = 1)) %>%
+  bold(part = "header") %>%
+  bg(bg = "#f2f2f2", part = "header") %>%
+  padding(padding = 4, part = "all") %>%
+  width(width = c(3.5, 2))
+
+# Применяем форматирование к заголовкам разделов
+section_indices <- which(ratio_analysis_corrected$Значение == "")
+for(idx in section_indices) {
+  ft_ratio_corrected <- ft_ratio_corrected %>%
+    merge_at(i = idx, j = 1:2, part = "body") %>%
+    align(i = idx, align = "center", part = "body") %>%
+    bold(i = idx, part = "body") %>%
+    bg(i = idx, bg = "#f8f8f8", part = "body") %>%
+    border(i = idx, 
+           border.top = fp_border(color = "black", width = 1),
+           border.bottom = fp_border(color = "black", width = 1),
+           part = "body")
+}
+
+# Отображаем таблицу
+ft_ratio_corrected
+```
+
+**В КРОВИ:**
+
+- 53.5% пациентов (61 из 114) имеют отклонения в соотношении ацилкарнитин/свободный карнитин.
+
+- Повышенное соотношение (>0.8): 37.7% пациентов - наиболее частая аномалия.
+
+- Сниженное соотношение (<0.1): 15.8% пациентов.
+
+- Среднее соотношение 0.73 - близко к верхней границе нормы (0.8).
+
+**В МОЧЕ:**
+
+- 34.8% пациентов (39 из 112, где возможно рассчитать) имеют отклонения от нормы.
+
+- Преобладают сниженные значения (<0.5): 34.2%.
+
+- Только 1.8% пациентов имеют повышенное соотношение (>7.3).
+
+- Среднее соотношение 1.15 - в пределах референса (0.5-7.3).
+
+Только 29.5% пациентов имеют нормальное соотношение в обоих показателях. 70.5% пациентов имеют те или иные нарушения метаболизма карнитина. 
+
+Также обнаружены различия между кровью и мочей:
+
+- В крови преимущественно повышенные значения (37.7% пациентов).
+
+= В моче преимущественно сниженные значения (34.2%).
 
 <br>
 
