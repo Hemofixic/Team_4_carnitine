@@ -834,7 +834,7 @@ ft_desc
 - Прогрессивная подвижность ≥32%
 - Нормальная морфология ≥4%
 
-```{r}
+```{r second_point_SEM}
 # Создание бинарных переменных для нормализованной спермограммы
 data_primary <- data %>%
   mutate(
@@ -853,7 +853,7 @@ data_primary <- data %>%
   mutate(
     V1_NORMALIZED = as.numeric(V1_NORMALIZED),
     V2_NORMALIZED = as.numeric(V2_NORMALIZED)
-  )
+  ) 
 
 # Описательная статистика по группам
 primary_desc <- data_primary %>%
@@ -863,7 +863,7 @@ primary_desc <- data_primary %>%
     # Исходный визит (V1)
     V1_normalized_n = sum(V1_NORMALIZED == 1),
     V1_normalized_pct = round(mean(V1_NORMALIZED == 1) * 100, 1),
-    # Визит 2 (V2, 6 месяцев)
+    # Визит 2 (V2, 3 месяца)
     V2_normalized_n = sum(V2_NORMALIZED == 1),
     V2_normalized_pct = round(mean(V2_NORMALIZED == 1) * 100, 1),
     # Изменение
@@ -871,24 +871,69 @@ primary_desc <- data_primary %>%
     change_pct = V2_normalized_pct - V1_normalized_pct
   )
 
-print("Описательная статистика первичной конечной точки:")
-print(primary_desc)
+#вспомогательный датасет для возможности переименовая строк
+second_point_SEM <- primary_desc %>%
+  select(ARM, n_total, V1_normalized_n, V2_normalized_n, V2_normalized_pct) %>%
+  mutate(ARM = recode(
+    ARM,
+    "L-carnitine" = "L-карнитин",
+    "Placebo" = "Плацебо")
+  )
+  
+
+ft_second_point_SEM <- flextable(second_point_SEM) %>%
+  set_caption(caption = "Доля пациентов с нормализованной спермограммой до и после начала терапии") %>%
+  set_header_labels(
+    ARM = "Группа",
+    n_total = "Всего участников",
+    V1_normalized_n = "Здоровые пациенты (Визит 1)",
+    V1_normalized_pct = "Здоровые пациенты, % (Визит 1)",
+    V2_normalized_n = "Здоровые пациенты (Визит 2)",
+    V2_normalized_pct = "Здоровые пациенты, % (Визит 2)"
+  ) %>%
+  autofit() %>%
+  theme_box() %>%
+  align(align = "center", part = "all")
+
+ft_second_point_SEM
 ```
 
-```{r}
+```{r contingency_table_first_endpoint}
 # Статистический анализ: сравнение между группами на V2
 contingency_table <- table(
   data_primary$ARM, 
   factor(data_primary$V2_NORMALIZED, levels = c(0, 1), labels = c("Не нормализована", "Нормализована"))
 )
-print("Таблица сопряженности (Группа × Нормализация на V2):")
-print(contingency_table)
 
 # Критерий хи-квадрат
-chi_square_test <- chisq.test(contingency_table)
-cat("\nКритерий хи-квадрат:\n")
-print(chi_square_test)
+contingency_df <- as.data.frame.matrix(contingency_table) %>%
+  rownames_to_column(var = "Группа") %>%
+  mutate(
+    Группа = recode(
+      Группа,
+      "L-carnitine" = "L-карнитин",
+      "Placebo" = "Плацебо"
+    )
+  )
 
+ft_contingency <- flextable(contingency_df) %>%
+  set_caption("Таблица X. Распределение пациентов по нормализации показателя на втором визите") %>%
+  set_header_labels(
+    Группа = "Группа",
+    `Не нормализована` = "Не нормализована",
+    `Нормализована` = "Нормализована"
+  ) %>%
+  autofit() %>%
+  theme_box() %>%
+  align(align = "center", part = "all")
+
+ft_contingency
+```
+
+```{r chi_square_first_endpoint}
+chi_square_test <- chisq.test(contingency_table)
+chi_value <- unname(chi_square_test$statistic)
+p_value   <- chi_square_test$p.value
 # Расчет относительного риска (RR) и разности долей (RD) с обработкой нулевых значений
 if (nrow(contingency_table) == 2 && ncol(contingency_table) == 2) {
   row_names <- rownames(contingency_table)
@@ -909,9 +954,8 @@ if (nrow(contingency_table) == 2 && ncol(contingency_table) == 2) {
   RD_CI_lower <- RD - 1.96 * SE_RD
   RD_CI_upper <- RD + 1.96 * SE_RD
   
-  cat("\nРазность долей (RD):", round(RD, 4))
-  cat("\n95% ДИ для RD: [", round(RD_CI_lower, 4), "; ", round(RD_CI_upper, 4), "]\n", sep = "")
-  
+  #cat("\nРазность долей (RD):", round(RD, 4))
+  #cat("\n95% ДИ для RD: [", round(RD_CI_lower, 4), "; ", round(RD_CI_upper, 4), "]\n", sep = "")
   # Относительный риск (RR) - только если обе доли > 0
   if (a > 0 && c > 0) {
     RR <- p1 / p2
@@ -928,7 +972,36 @@ if (nrow(contingency_table) == 2 && ncol(contingency_table) == 2) {
     CI_upper <- NA
   }
 }
+
+chi_square_stats <- data.frame(
+  Показатель = c(
+    "Хи-квадрат",
+    "p-значение",
+    "Разность долей (RD)",
+    "95% доверительный интервал для RD"
+  ),
+  Значение = c(
+    round(chi_value, 3),
+    signif(p_value, 3),
+    round(RD, 3),
+    paste0(
+      "[",
+      round(RD_CI_lower, 3), "; ",
+      round(RD_CI_upper, 3),
+      "]"
+    )
+  )
+)
+
+ft_chi_square_stats <- flextable(chi_square_stats) %>%
+  set_caption("Таблица X. Сравнение частотыных переменных с помощью критерия χ²") %>%
+  autofit() %>%
+  theme_box() %>%
+  align(align = "center", part = "all")
+
+ft_chi_square_stats
 ```
+В связи с низкими частотами событий в таблице сопряженности расчет отношения рисков (RR) оказался невозможен. В качестве альтернативной меры эффекта была использована разность долей
 
 ```{r}
 # Подготовка данных для визуализации
