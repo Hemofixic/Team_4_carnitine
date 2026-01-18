@@ -17,6 +17,9 @@ execute:
 ---
 ```{r}
 library(tidyverse)
+library(rstatix)
+library(flextable)
+library(broom)
 ```
 
 ```{r}
@@ -34,7 +37,234 @@ data <- read.csv("data/team4_ecrf_wide.csv")
 
 # Анализ вторичных конечных точек
 
-## Среднее изменение количественных параметров спермы (концентрации сперматозоидов (млн/мл), прогрессивной подвижности (%) и морфологии (%)) от исходного уровня к завершению исследования.
+## Среднее изменение количественных параметров спермы (концентрации сперматозоидов (млн/мл), прогрессивной подвижности (%) и нормальной морфологии (%)) от исходного уровня к завершению исследования
+
+Для оценки влияния приема препарата (L-карнитин) на динамику параметров спермограммы (концентрации сперматозоидов (млн/мл), прогрессивная подвижность (%) и нормальная морфология (%)) был проведен смешанный дисперсионный анализ (Mixed ANOVA) с факторами "Группа" (Терапия L-карнитином против Плацебо) и "Время" (Визит 1 против Визит 2).
+
+```{r anova_SEM_CONC}
+data_SEM_CONC <- data %>%
+  pivot_longer(
+    cols = c(V1_SEM_CONC, V2_SEM_CONC),
+    names_to = "time",
+    values_to = "SEM_CONC"
+  ) %>%
+  mutate(time = str_replace(time, "_SEM_CONC", "")) %>%  
+  mutate(time = factor(time, levels = c("V1", "V2")))
+
+SEM_CONC_changes_comparison_anova <- anova_test(
+  data = data_SEM_CONC,
+  dv = SEM_CONC,
+  wid = USUBJID,
+  between = ARM, 
+  within = time
+) %>%
+  as_tibble() %>%
+  select(Effect, `F`, "p")  %>%
+  mutate(Effect = recode(
+    Effect,
+    ARM = "Терапия",
+    time = "Время",
+    "ARM:time" = "Терапия:Время")
+  )
+
+ft_SEM_CONC_changes_comparison_anova <- SEM_CONC_changes_comparison_anova %>%
+  mutate(
+    `F` = round(`F`, 2),
+    `p` = round(`p`, 4)
+  ) %>%
+  flextable() %>%
+  set_caption(caption = "ANOVA: факторы \"Группа терапии\" и \"Время\",\n переменная \"Концентрация сперматозоидов (млн-мл)\"") %>%
+  autofit() %>% 
+  set_header_labels(
+    values = list(
+      Effect = "Фактор",
+      `F` = "F-статистика",
+      `p`= "p-значение"
+    )
+  ) %>%
+  bold(part = "header")  %>%
+  align(align = "center", part = "header") %>%
+  align(align = "center", part = "body")   
+
+ft_SEM_CONC_changes_comparison_anova
+```
+
+Статистически значимого влияния группы, времени и их взаимодействия на "Концентрацию сперматозоидов (млн-мл) "не выявлено ($p = 0.087$). Размеры эффектов были пренебрежимо малы. 
+
+```{r anova_SEM_PMOT}
+data_SEM_PMOT <- data %>%
+  pivot_longer(
+    cols = c(V1_SEM_PMOT, V2_SEM_PMOT),
+    names_to = "time",
+    values_to = "SEM_PMOT"
+  ) %>%
+  mutate(time = str_replace(time, "_SEM_PMOT", "")) %>%  
+  mutate(time = factor(time, levels = c("V1", "V2")))
+
+SEM_PMOT_changes_comparison_anova <- anova_test(
+  data = data_SEM_PMOT,
+  dv = SEM_PMOT,
+  wid = USUBJID,
+  between = ARM, 
+  within = time
+) %>%
+  as_tibble() %>%
+  select(Effect, `F`, "p")  %>%
+  mutate(Effect = recode(
+    Effect,
+    ARM = "Терапия",
+    time = "Время",
+    "ARM:time" = "Терапия:Время")
+  )
+
+ft_SEM_PMOT_changes_comparison_anova <- SEM_PMOT_changes_comparison_anova %>%
+  mutate(
+    `F` = round(`F`, 2),
+    `p` = round(`p`, 4)
+  ) %>%
+  flextable() %>%
+  set_caption(caption = "ANOVA: факторы \"Группа терапии\" и \"Время\",\n переменная \"Прогрессивная подвижность (%)\"") %>%
+  autofit() %>% 
+  set_header_labels(
+    values = list(
+      Effect = "Фактор",
+      `F` = "F-статистика",
+      `p`= "p-значение"
+    )
+  ) %>%
+  bold(part = "header")  %>%
+  align(align = "center", part = "header") %>%
+  align(align = "center", part = "body")   
+
+ft_SEM_PMOT_changes_comparison_anova
+```
+Статистически значимого влияния группы, времени и их взаимодействия на "Концентрация сперматозоидов (млн-мл) "не выявлено ($p = 0.329$). Размеры эффектов были пренебрежимо малы.
+
+```{r anova_SEM_MORPH}
+data_SEM_MORPH <- data %>%
+  pivot_longer(
+    cols = c(V1_SEM_MORPH, V2_SEM_MORPH),
+    names_to = "time",
+    values_to = "SEM_MORPH"
+  ) %>%
+  mutate(time = str_replace(time, "_SEM_MORPH", "")) %>%  
+  mutate(time = factor(time, levels = c("V1", "V2")))
+
+SEM_MORPH_changes_comparison_anova <- anova_test(
+  data = data_SEM_MORPH,
+  dv = SEM_MORPH,
+  wid = USUBJID,
+  between = ARM, 
+  within = time
+  ) %>%
+  as_tibble() %>%
+  select(Effect, `F`, "p")  %>%
+  mutate(Effect = recode(
+    Effect,
+    ARM = "Терапия",
+    time = "Время",
+    "ARM:time" = "Терапия:Время")
+  )
+
+ft_SEM_MORPH_changes_comparison_anova <- SEM_MORPH_changes_comparison_anova %>%
+  mutate(
+    `F` = round(`F`, 2),
+    `p` = round(`p`, 4)
+  ) %>%
+  flextable() %>%
+  set_caption(caption = "ANOVA: факторы \"Группа терапии\" и \"Время\",\n переменная \"Нормальная морфология (%)\"") %>%
+  autofit() %>% 
+  set_header_labels(
+    values = list(
+      Effect = "Фактор",
+      `F` = "F-статистика",
+      `p`= "p-значение"
+    )
+  ) %>%
+  bold(part = "header")  %>%
+  align(align = "center", part = "header") %>%
+  align(align = "center", part = "body")   
+
+ft_SEM_MORPH_changes_comparison_anova
+```
+Первичный анализ (Таблица ANOVA) выявил статистически значимое взаимодействие факторов Группа × Время ($F(1, 112) = 9.16 , p = 0.003$). Это указывает на то, что изменение показателя морфологии во времени достоверно различалось между группой, принимавшей L-карнитин, и группой плацебо.  Также статистически значимым оказался межгрупповой эффект терапии ($p = 0.03$).  Поскольку анализ показал отсутствие общего основного эффекта времени ($p = 0.84$), то был проведен дополнительно t-тест для оценки различий между группами на первом визите (день 0).
+
+```{r day_1_SEM_MORPH}
+SEM_MORPH_t_test <- data_SEM_MORPH %>%
+  filter(time == "V1") %>%
+  t_test(SEM_MORPH ~ ARM) %>%
+  select(`.y.`, `p`) %>%
+  mutate(`.y.` = recode(
+    `.y.`,
+    SEM_MORPH = "Нормальная морфология (%)")
+  )
+
+ft_SEM_MORPH_t_test<- SEM_MORPH_t_test %>%
+  mutate(
+    `p` = round(`p`, 4)
+  ) %>%
+  flextable() %>%
+  set_caption(caption = "t-тест: факторы \"Нормальная морфология (%)\" ~ \"Группа терапии\", визит 1 (день 0)") %>%
+  autofit() %>% 
+  set_header_labels(
+    values = list(
+      `.y.` = "Признак",
+      `p`= "p-значение"
+    )
+  ) %>%
+  bold(part = "header")  %>%
+  align(align = "center", part = "header") %>%
+  align(align = "center", part = "body")   
+
+ft_SEM_MORPH_t_test
+```
+Однако проверка исходной сопоставимости групп (t-тест для Визита 1) показала наличие статистически значимых различий до начала терапии ($p = 0.02$). Поскольку исходная неоднородность выборки может искажать результаты ANOVA, за счет эффекта регрессии к среднему, для верификации эффективности препарата был применен ковариационный анализ (ANCOVA). Данный метод позволяет оценить влияние терапии на конечный результат (Визит 2), математически нивелируя разницу в исходных показателях (Визит 1).
+
+```{r ancova_SEM_MORPH}
+SEM_MORPH_changes_comparison_ancova <- lm(V2_SEM_MORPH ~ ARM + V1_SEM_MORPH, data = data) %>%
+  tidy(conf.int = TRUE,
+       conf.level = 0.95
+       ) %>%
+  select(term, estimate, conf.low, conf.high, p.value) %>%
+  mutate(
+    estimate = round(estimate, 2),
+    conf.low  = round(conf.low, 2),
+    conf.high = round(conf.high, 2),
+    p.value = round(p.value, 4),
+    term = recode(
+      term,
+      `(Intercept)` = "Константа",
+      ARMPlacebo = "Терапия",
+      V1_SEM_MORPH = "Нормальная морфология (%), визит 1"
+    )
+  ) %>%
+  filter(term == "Терапия")
+
+r2_value <- glance(SEM_MORPH_changes_comparison_ancova$r.squared) %>%
+  round(3)
+
+ft_SEM_MORPH_changes_comparison_ancova <- flextable(SEM_MORPH_changes_comparison_ancova) %>%
+  set_caption(
+    paste0(
+      "ANCOVA: влияние терапии на V2 SEM_MORPH (R² = ", r2_value, ")"
+    )
+  ) %>%
+  set_header_labels(
+    term = "Предиктор",
+    estimate = "Оценка (β)",
+    p.value = "p-значение",
+    conf.low = "Верхняя граница 95% ДИ",
+    conf.high = "Нижняя граница 95% ДИ"
+  ) %>%
+  bold(part = "header") %>%
+  align(align = "center", part = "all") %>%
+  autofit()
+
+ft_SEM_MORPH_changes_comparison_ancova
+```
+Модель продемонстрировала высокую точность аппроксимации ($R^2 = 0.99, p < 0.001$), что свидетельствует о сильной зависимости итоговых значений морфологии от исходного уровня пациента. Важно, что даже после жесткой коррекции на исходный уровень фактор терапии сохранил высокую статистическую значимость ($p = 0.003$). Расчетные коэффициенты модели ($Терапия = -0.11$) показывают, что при условии равного старта группа Плацебо демонстрирует результат статистически значимо ниже, чем группа L-карнитина. 95% доверительный интервал для коэффициента терапии составил −0.18;−0.04 и не включает ноль, что подтверждает статистическую значимость выявленного эффекта..
+
+Наблюдаемое улучшение показателей в группе терапии не является артефактом исходных различий. Прием L-карнитина оказывает самостоятельный, статистически подтвержденный положительный эффект на процент нормальной морфологии сперматозоидов по сравнению с плацебо. Однако, интерпретируя полученные результаты, необходимо учитывать величину наблюдаемого эффекта. Диапазон значений нормальной морфологии в анализируемой выборке варьировал от 0.1% до 9.5%, а расчетное преимущество группы терапии составило всего 0.11 процентных пункта. Несмотря на высокую статистическую достоверность ($p = 0.003$), клиническая значимость такого малого прироста требует дополнительной оценки профильным специалистом, так как столь незначительные изменения могут не оказывать существенного влияния на фертильный потенциал в соответствии с критериями ВОЗ (нижняя граница нормы — 4%).
 
 <br>
  
