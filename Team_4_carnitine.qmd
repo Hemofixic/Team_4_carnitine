@@ -15,6 +15,14 @@ execute:
     warning: false
     message: false
 ---
+```{r}
+library(tidyverse)
+```
+
+```{r}
+data <- read.csv("data/team4_ecrf_wide.csv")
+```
+
 
 # Эксплораторный анализ
 
