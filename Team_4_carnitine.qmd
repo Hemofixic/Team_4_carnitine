@@ -15,16 +15,335 @@ execute:
     warning: false
     message: false
 ---
+
 ```{r}
 library(tidyverse)
+library(flextable)
+library(officer)
 ```
 
 ```{r}
 data <- read.csv("data/team4_ecrf_wide.csv")
 ```
 
+# Информация о переменных
+
+Все названия переменных (столбцов) следуют единому шаблону:
+
+-   V1\_ — измерения, проведённые на первом визите (День 1), то есть исходные, базовые показатели.
+-   V2\_ — измерения, проведённые на втором визите (День 90), то есть показатели после курса терапии.
+-   После префикса визита следует код домена (категории данных), например DEM (демография), SEM (спермограмма).
+-   Заканчивается название конкретным параметром, например AGE (возраст), CONC (концентрация).
+-   Данные хранятся в формате "один пациент — одна строка" (wide format).
+
+**1. Идентификационные и группирующие переменные**
+
+-   *USUBJID* — Уникальный буквенно-цифровой идентификатор пациента в исследовании.
+-   *ARM* — Группа терапи, в которую был рандомизирован пациент. Принимает значения: "Placebo" (группа плацебо) или "L-carnitine" (группа активного лечения).
+
+**2. Демографические и общие данные (измерены на Визите 1)**
+
+Эти переменные описывают базовые характеристики пациентов и были собраны однократно при включении в исследование.
+
+-   *V1_DEM_SEX* — Пол пациента. Все участники исследования — мужчины.
+-   *V1_DEM_AGE* — Возраст пациента на момент включения в исследование, полных лет.
+-   *V1_ANT_HEIGHTCM* — Рост пациента, измеренный в сантиметрах (см).
+-   *V1_ANT_WEIGHTKG* — Масса тела пациента, измеренная в килограммах (кг).
+-   *V1_ANT_BMI* — Индекс массы тела (ИМТ), рассчитанный как масса тела (кг) / рост² (м²).
+
+**3. Витальные признаки и безопасность**
+
+Показатели безопасности, оценивавшиеся на обоих визитах. Переменные имеют бинарный (0/1) формат, где 0 означает "Норма", а 1 означает "Отклонение от нормы".
+
+Измерено на Визите 1 (День 1):
+
+-   *V1_VIT_HR_ABN* — Наличие отклонения частоты сердечных сокращений (ЧСС).
+-   *V1_VIT_RR_ABN* — Наличие отклонения частоты дыхательных движений (ЧДД).
+-   *V1_VIT_BP_ABN* — Наличие отклонения артериального давления (АД).
+-   *V1_VIT_TEMP_ABN* — Наличие отклонения температуры тела.
+
+Измерено на Визите 2 (День 90):
+
+-   *V2_VIT_HR_ABN* — Наличие отклонения ЧСС после лечения.
+-   *V2_VIT_RR_ABN* — Наличие отклонения ЧДД после лечения.
+-   *V2_VIT_BP_ABN* — Наличие отклонения АД после лечения.
+-   *V2_VIT_TEMP_ABN* — Наличие отклонения температуры тела после лечения.
+
+**4. Гормональный профиль**
+
+Уровни ключевых гормонов, регулирующих сперматогенез, измеренные в сыворотке крови.
+
+Измерено на Визите 1 (День 1):
+
+-   *V1_HOR_FSH* — Уровень фолликулостимулирующего гормона (ФСГ), МЕ/л.
+-   *V1_HOR_LH* — Уровень лютеинизирующего гормона (ЛГ), МЕ/л.
+-   *V1_HOR_TT* — Уровень общего тестостерона, нг/дл.
+
+Измерено на Визите 2 (День 90):
+
+-   *V2_HOR_FSH* — Уровень ФСГ после лечения.
+-   *V2_HOR_LH* — Уровень ЛГ после лечения.
+-   *V2_HOR_TT* — Уровень общего тестостерона после лечения.
+
+**5. Биохимические маркеры L-карнитина**
+
+Показатели, отражающие фармакокинетику и метаболизм исследуемого препарата.
+
+Измерено на Визите 1 (День 1):
+
+-   *V1_LCA_B_FREE* — Концентрация свободного L-карнитина в крови (усл. ед.).
+-   *V1_LCA_B_TOTAL* — Концентрация общего L-карнитина в крови (усл. ед.).
+-   *V1_LCA_U_FREE* — Концентрация свободного L-карнитина в моче (усл. ед.).
+-   *V1_LCA_U_TOTAL* — Концентрация общего L-карнитина в моче (усл. ед.).
+
+Измерено на Визите 2 (День 90): 
+
+-   *V2_LCA_B_FREE* — Концентрация свободного L-карнитина в крови.
+-   *V2_LCA_B_TOTAL* — Концентрация общего L-карнитина в крови.
+-   *V2_LCA_U_FREE* — Концентрация свободного L-карнитина в моче.
+-   *V2_LCA_U_TOTAL* — Концентрация общего L-карнитина в моче.
+
+**6. Лабораторные параметры эякулята**
+
+**6.1. Суммарная антиоксидантная способность (TAC)** 
+
+Показатель, отражающий способность семенной плазмы нейтрализовать окислительный стресс, который является одним из факторов мужского бесплодия.
+
+-   *V1_TAC_TAC* — Измерена на Визите 1 (День 1), усл. ед.
+-   *V2_TAC_TAC* — Измерена на Визите 2 (День 90), усл. ед.
+
+**6.2. Параметры спермограммы (ключевые исходы эффективности)** 
+
+Нормативные пороги: Концентрация ≥15 млн/мл, Прогрессивная подвижность ≥32%, Нормальная морфология ≥4% согласно руководству ВОЗ (2010).
+
+Измерено на Визите 1 (День 1):
+
+-   *V1_SEM_CONC* — Концентрация сперматозоидов, млн/мл.
+-   *V1_SEM_PMOT* — Процент сперматозоидов с прогрессивной подвижностью (%).
+-   *V1_SEM_MORPH* — Процент сперматозоидов с нормальной морфологией (%).
+
+Измерено на Визите 2 (День 90):
+
+-   *V2_SEM_CONC* — Концентрация сперматозоидов, млн/мл.
+-   *V2_SEM_PMOT* — Процент сперматозоидов с прогрессивной подвижностью (%).
+-   *V2_SEM_MORPH* — Процент сперматозоидов с нормальной морфологией (%).
 
 # Эксплораторный анализ
+
+```{r}
+data_clean <- data %>% 
+  mutate(across(c(ARM, V1_DEM_SEX,
+                  V1_VIT_HR_ABN, V1_VIT_RR_ABN, V1_VIT_BP_ABN, V1_VIT_TEMP_ABN,
+                  V2_VIT_HR_ABN, V2_VIT_RR_ABN, V2_VIT_BP_ABN, V2_VIT_TEMP_ABN), as.factor)) %>% 
+  mutate(as.numeric(USUBJID))
+
+summary(data)
+```
+
+```{r}
+cat("Пропуски в данных:\n")
+print(colSums(is.na(data_clean))[colSums(is.na(data_clean)) > 0])
+cat("\nВсего строк с пропусками:", sum(!complete.cases(data_clean)))
+```
+-   В датасете не обнаружено пропущенных значений.
+-   Данные чистые и готовы к анализу.
+-   Все переменные имеют ожидаемые диапазоны значений, аномалий в суммарной статистике не видно.
+-   Группы сбалансированы по размеру (57 vs 57).
+
+```{r}
+# Создаем датафрейм с описательной статистикой
+desc_stats <- data.frame(
+  Характеристика = character(),
+  Значение = character(),
+  stringsAsFactors = FALSE
+)
+
+# Функция для добавления заголовка раздела (будет занимать 2 столбца)
+add_header <- function(section_name) {
+  desc_stats <<- rbind(desc_stats, 
+                      data.frame(Характеристика = section_name,
+                                 Значение = "",
+                                 stringsAsFactors = FALSE))
+}
+
+# Функция для добавления строк с данными
+add_stat <- function(characteristic, value) {
+  desc_stats <<- rbind(desc_stats, 
+                      data.frame(Характеристика = characteristic,
+                                 Значение = value,
+                                 stringsAsFactors = FALSE))
+}
+
+n_total <- nrow(data_clean)
+
+# 1. ОБЩАЯ ИНФОРМАЦИЯ
+add_header("ОБЩАЯ ИНФОРМАЦИЯ")
+add_stat("Всего пациентов", sprintf("N = %d", n_total))
+add_stat("Группа L-карнитин", 
+         sprintf("%d (%.1f%%)", sum(data_clean$ARM == "L-carnitine"),
+                 sum(data_clean$ARM == "L-carnitine")/n_total*100))
+add_stat("Группа плацебо", 
+         sprintf("%d (%.1f%%)", sum(data_clean$ARM == "Placebo"),
+                 sum(data_clean$ARM == "Placebo")/n_total*100))
+
+# 2. ДЕМОГРАФИЧЕСКИЕ ХАРАКТЕРИСТИКИ
+add_header("ДЕМОГРАФИЧЕСКИЕ ХАРАКТЕРИСТИКИ (ИСХОДНО, V1)")
+add_stat("Возраст, лет (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V1_DEM_AGE), sd(data_clean$V1_DEM_AGE)))
+add_stat("Диапазон возраста", 
+         sprintf("%d - %d лет", min(data_clean$V1_DEM_AGE), max(data_clean$V1_DEM_AGE)))
+add_stat("Рост, см (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V1_ANT_HEIGHTCM), sd(data_clean$V1_ANT_HEIGHTCM)))
+add_stat("Вес, кг (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V1_ANT_WEIGHTKG), sd(data_clean$V1_ANT_WEIGHTKG)))
+add_stat("ИМТ, кг/м² (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V1_ANT_BMI), sd(data_clean$V1_ANT_BMI)))
+add_stat("Диапазон ИМТ", 
+         sprintf("%.1f - %.1f", min(data_clean$V1_ANT_BMI), max(data_clean$V1_ANT_BMI)))
+
+# 3. ГОРМОНАЛЬНЫЙ ПРОФИЛЬ
+add_header("ГОРМОНАЛЬНЫЙ ПРОФИЛЬ (ИСХОДНО, V1)")
+add_stat("ФСГ, МЕ/л (среднее ± СО)", 
+         sprintf("%.2f ± %.2f", mean(data_clean$V1_HOR_FSH), sd(data_clean$V1_HOR_FSH)))
+add_stat("ЛГ, МЕ/л (среднее ± СО)", 
+         sprintf("%.2f ± %.2f", mean(data_clean$V1_HOR_LH), sd(data_clean$V1_HOR_LH)))
+add_stat("Тестостерон, нг/дл (среднее ± СО)", 
+         sprintf("%.0f ± %.0f", mean(data_clean$V1_HOR_TT), sd(data_clean$V1_HOR_TT)))
+
+# 4. БИОХИМИЯ L-КАРНИТИНА
+add_header("БИОХИМИЯ L-КАРНИТИНА (ИСХОДНО, V1)")
+add_stat("Свободный L-карнитин в крови, ед. (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V1_LCA_B_FREE), sd(data_clean$V1_LCA_B_FREE)))
+add_stat("Общий L-карнитин в крови, ед. (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V1_LCA_B_TOTAL), sd(data_clean$V1_LCA_B_TOTAL)))
+add_stat("Свободный L-карнитин в моче, ед. (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V1_LCA_U_FREE), sd(data_clean$V1_LCA_U_FREE)))
+add_stat("Общий L-карнитин в моче, ед. (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V1_LCA_U_TOTAL), sd(data_clean$V1_LCA_U_TOTAL)))
+
+# 5. СПЕРМОГРАММА - ИСХОДНЫЕ ПОКАЗАТЕЛИ
+add_header("СПЕРМОГРАММА - ИСХОДНЫЕ ПОКАЗАТЕЛИ (V1)")
+add_stat("Концентрация сперматозоидов, млн/мл (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V1_SEM_CONC), sd(data_clean$V1_SEM_CONC)))
+add_stat("Пациенты с нормальной концентрацией (≥15 млн/мл)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V1_SEM_CONC >= 15),
+                 sum(data_clean$V1_SEM_CONC >= 15)/n_total*100))
+add_stat("Прогрессивная подвижность, % (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V1_SEM_PMOT), sd(data_clean$V1_SEM_PMOT)))
+add_stat("Пациенты с нормальной подвижностью (≥32%)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V1_SEM_PMOT >= 32),
+                 sum(data_clean$V1_SEM_PMOT >= 32)/n_total*100))
+add_stat("Нормальная морфология, % (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V1_SEM_MORPH), sd(data_clean$V1_SEM_MORPH)))
+add_stat("Пациенты с нормальной морфологией (≥4%)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V1_SEM_MORPH >= 4),
+                 sum(data_clean$V1_SEM_MORPH >= 4)/n_total*100))
+
+# 6. СПЕРМОГРАММА - ПОСЛЕ ЛЕЧЕНИЯ
+add_header("СПЕРМОГРАММА - ПОСЛЕ ЛЕЧЕНИЯ (V2, ДЕНЬ 90)")
+add_stat("Концентрация сперматозоидов, млн/мл (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V2_SEM_CONC), sd(data_clean$V2_SEM_CONC)))
+add_stat("Пациенты с нормальной концентрацией (≥15 млн/мл)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V2_SEM_CONC >= 15),
+                 sum(data_clean$V2_SEM_CONC >= 15)/n_total*100))
+add_stat("Прогрессивная подвижность, % (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V2_SEM_PMOT), sd(data_clean$V2_SEM_PMOT)))
+add_stat("Пациенты с нормальной подвижностью (≥32%)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V2_SEM_PMOT >= 32),
+                 sum(data_clean$V2_SEM_PMOT >= 32)/n_total*100))
+add_stat("Нормальная морфология, % (среднее ± СО)", 
+         sprintf("%.1f ± %.1f", mean(data_clean$V2_SEM_MORPH), sd(data_clean$V2_SEM_MORPH)))
+add_stat("Пациенты с нормальной морфологией (≥4%)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V2_SEM_MORPH >= 4),
+                 sum(data_clean$V2_SEM_MORPH >= 4)/n_total*100))
+
+# 7. АНТИОКСИДАНТНАЯ СПОСОБНОСТЬ
+add_header("АНТИОКСИДАНТНАЯ СПОСОБНОСТЬ СЕМЕННОЙ ПЛАЗМЫ")
+add_stat("Суммарная антиоксидантная способность, ед. (V1)", 
+         sprintf("%.3f ± %.3f", mean(data_clean$V1_TAC_TAC), sd(data_clean$V1_TAC_TAC)))
+add_stat("Суммарная антиоксидантная способность, ед. (V2)", 
+         sprintf("%.3f ± %.3f", mean(data_clean$V2_TAC_TAC), sd(data_clean$V2_TAC_TAC)))
+
+# 8. ВИТАЛЬНЫЕ ПРИЗНАКИ - ОТКЛОНЕНИЯ
+add_header("ВИТАЛЬНЫЕ ПРИЗНАКИ - ПАЦИЕНТЫ С ОТКЛОНЕНИЯМИ")
+add_stat("Отклонение ЧСС (V1)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V1_VIT_HR_ABN == "1"),
+                 sum(data_clean$V1_VIT_HR_ABN == "1")/n_total*100))
+add_stat("Отклонение ЧСС (V2)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V2_VIT_HR_ABN == "1"),
+                 sum(data_clean$V2_VIT_HR_ABN == "1")/n_total*100))
+add_stat("Отклонение ЧДД (V1)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V1_VIT_RR_ABN == "1"),
+                 sum(data_clean$V1_VIT_RR_ABN == "1")/n_total*100))
+add_stat("Отклонение ЧДД (V2)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V2_VIT_RR_ABN == "1"),
+                 sum(data_clean$V2_VIT_RR_ABN == "1")/n_total*100))
+add_stat("Отклонение АД (V1)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V1_VIT_BP_ABN == "1"),
+                 sum(data_clean$V1_VIT_BP_ABN == "1")/n_total*100))
+add_stat("Отклонение АД (V2)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V2_VIT_BP_ABN == "1"),
+                 sum(data_clean$V2_VIT_BP_ABN == "1")/n_total*100))
+add_stat("Отклонение температуры (V1)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V1_VIT_TEMP_ABN == "1"),
+                 sum(data_clean$V1_VIT_TEMP_ABN == "1")/n_total*100))
+add_stat("Отклонение температуры (V2)", 
+         sprintf("%d (%.1f%%)", sum(data_clean$V2_VIT_TEMP_ABN == "1"),
+                 sum(data_clean$V2_VIT_TEMP_ABN == "1")/n_total*100))
+
+# Создаем таблицу с flextable
+ft_desc <- flextable(desc_stats) %>%
+  # Настройка шрифтов и размеров
+  fontsize(size = 9, part = "all") %>%
+  font(fontname = "Times New Roman", part = "all") %>%
+  # Выравнивание - заголовки столбцов по центру
+  align(align = "center", part = "header") %>%
+  # Выравнивание тела таблицы
+  align(align = "left", part = "body") %>%
+  align(j = 2, align = "right", part = "body") %>%
+  # Заголовок таблицы
+  set_caption("Таблица 1. Описательная статистика выборки (N = 114 пациентов)") %>%
+  # Подпись
+  add_footer_lines("Примечание: V1 - исходный визит (День 1), V2 - визит после лечения (День 90); 
+Нормативные значения ВОЗ (2010): Концентрация ≥15 млн/мл, Подвижность ≥32%, Морфология ≥4%, ЧСС - частота сердечных сокращений, ЧДД - частота дыхательных движений, АД - артериальное давление") %>%
+  # Автоподбор ширины
+  autofit() %>%
+  # Добавляем границы между всеми ячейками
+  border_inner(border = fp_border(color = "black", width = 1)) %>%
+  border_outer(border = fp_border(color = "black", width = 1)) %>%
+  # Жирный шрифт для заголовков таблицы
+  bold(part = "header") %>%
+  # Цвет фона для заголовка таблицы
+  bg(bg = "#f2f2f2", part = "header") %>%
+  # отступы для лучшей читаемости
+  padding(padding = 4, part = "all") %>%
+  # Устанавливаем ширину столбцов
+  width(width = c(4, 2))
+
+# индексы строк с заголовками разделов
+section_indices <- which(desc_stats$Значение == "")
+
+# форматирование к заголовкам разделов
+for(idx in section_indices) {
+  ft_desc <- ft_desc %>%
+    # Объединяем ячейки для заголовка раздела
+    merge_at(i = idx, j = 1:2, part = "body") %>%
+    # Выравнивание по центру
+    align(i = idx, align = "center", part = "body") %>%
+    # Жирный шрифт
+    bold(i = idx, part = "body") %>%
+    # Цвет фона
+    bg(i = idx, bg = "#f8f8f8", part = "body") %>%
+    # Границы
+    border(i = idx, 
+           border.top = fp_border(color = "black", width = 1),
+           border.bottom = fp_border(color = "black", width = 1),
+           part = "body")
+}
+
+# Отображаем таблицу
+ft_desc
+```
 
 <br>
 
@@ -37,7 +356,7 @@ data <- read.csv("data/team4_ecrf_wide.csv")
 ## Среднее изменение количественных параметров спермы (концентрации сперматозоидов (млн/мл), прогрессивной подвижности (%) и морфологии (%)) от исходного уровня к завершению исследования.
 
 <br>
- 
+
 ## Гормональный профиль и биохимические маркеры (тестостерон, ФСГ, ЛГ).
 
 <br>
@@ -49,4 +368,3 @@ data <- read.csv("data/team4_ecrf_wide.csv")
 # Анализ параметров безопасности
 
 <br>
-
