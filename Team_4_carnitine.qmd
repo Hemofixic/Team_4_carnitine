@@ -1286,7 +1286,6 @@ ft_SEM_PMOT_changes_comparison_anova <- SEM_PMOT_changes_comparison_anova %>%
   ) %>%
   flextable() %>%
   set_caption(caption = "ANOVA: факторы \"Группа терапии\" и \"Время\",\n переменная \"Прогрессивная подвижность (%)\"") %>%
-  autofit() %>% 
   set_header_labels(
     values = list(
       Effect = "Фактор",
@@ -1294,6 +1293,7 @@ ft_SEM_PMOT_changes_comparison_anova <- SEM_PMOT_changes_comparison_anova %>%
       `p`= "p-значение"
     )
   ) %>%
+  autofit() %>% 
   bold(part = "header")  %>%
   align(align = "center", part = "header") %>%
   align(align = "center", part = "body")   
